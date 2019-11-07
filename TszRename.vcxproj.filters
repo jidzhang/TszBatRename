@@ -15,9 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="TszRename.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -90,6 +87,7 @@
     <None Include="res\TszRename.rc2">
       <Filter>资源文件</Filter>
     </None>
+    <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\TszRename.ico">
