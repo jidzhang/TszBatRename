@@ -6,20 +6,20 @@
 
 class CROEdit : public CEdit
 {
-	DECLARE_DYNAMIC(CROEdit)
+    DECLARE_DYNAMIC(CROEdit)
 
 public:
-	CROEdit();
-	virtual ~CROEdit();
+    CROEdit();
+    virtual ~CROEdit();
 
 private:
-	HBRUSH m_hBrush;
+    HBRUSH m_hBrush;
 
 protected:
-	DECLARE_MESSAGE_MAP()
+    DECLARE_MESSAGE_MAP()
 public:
-	afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
-	afx_msg HBRUSH CtlColor(CDC* pDC, UINT nCtlColor);
-	afx_msg void OnKillFocus(CWnd* pNewWnd);
-	virtual BOOL PreTranslateMessage(MSG* pMsg);
+    afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
+    afx_msg HBRUSH CtlColor(CDC* pDC, UINT nCtlColor);
+    afx_msg void OnKillFocus(CWnd* pNewWnd);
+    virtual BOOL PreTranslateMessage(MSG* pMsg);
 };
