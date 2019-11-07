@@ -5,15 +5,14 @@
 
 bool os_higher_than_xp()
 {
-    bool ans = false;
     OSVERSIONINFO osInfo;
     osInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
     GetVersionEx(&osInfo);
     if (osInfo.dwPlatformId == 2) {
         if (osInfo.dwMajorVersion >= 6)
-            ans = true;
+            return true;
     }
-    return ans;
+    return false;
 }
 
 CString select_path_dlg_xp(HWND hwndOwner)
@@ -22,7 +21,7 @@ CString select_path_dlg_xp(HWND hwndOwner)
     BROWSEINFO bi = { 0 };
     memset(&bi, 0, sizeof(bi));
     bi.hwndOwner = hwndOwner;
-    bi.lpszTitle = _T("选择一个文件夹");
+    bi.lpszTitle = _T("选择文件夹");
     bi.ulFlags = BIF_DONTGOBELOWDOMAIN | BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX;
     LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
     if (!pidl) {
@@ -39,6 +38,7 @@ CString select_path_dlg_xp(HWND hwndOwner)
     }
     return ans;
 }
+
 std::vector<CString> select_path_dlg(HWND hwndOwner)
 {
     std::vector<CString> ans;
@@ -80,14 +80,14 @@ vector<CString> get_files_in_path(CString path)
     return ans;
 }
 
-CString YYMMDD(CTime t)
+CString YYMMDD(const CTime & t)
 {
     CString str;
     str.Format(_T("%4d%02d%02d"), t.GetYear(), t.GetMonth(), t.GetDay());
     return str;
 }
 
-CString hhmmss(CTime t)
+CString hhmmss(const CTime & t)
 {
     CString str;
     str.Format(_T("%02d%02d%02d"), t.GetHour(), t.GetMinute(), t.GetSecond());
@@ -101,24 +101,16 @@ CString change_word_case(CString str, int wcase)
     CString ans = str;
     //不变
     if (wcase == 0) {
-    }
-    //全部大写
-    else if (wcase == 1) {
+    } else if (wcase == 1) {    //全部大写
         ans = str.MakeUpper();
-    }
-    //全部小写
-    else if (wcase == 2) {
+    } else if (wcase == 2) {    //全部小写
         ans = str.MakeLower();
-    }
-    //首字母大写
-    else if (wcase == 3) {
+    } else if (wcase == 3) {    //首字母大写
         ans = str.MakeLower();
         CString t1 = ans.Left(1);
         CString t2 = ans.Right(ans.GetLength() - 1);
         ans = t1.MakeUpper() + t2;
-    }
-    //每个词的首字母大写
-    else if (wcase == 4) {
+    } else if (wcase == 4) {    //每个词的首字母大写
         bool balpha = false;
         for (int i = 0; i < str.GetLength(); ++i) {
             TCHAR c = str[i];
