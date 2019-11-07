@@ -1,0 +1,29 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TszRenamePro", "TszRename.vcxproj", "{8027BF51-8F0A-4036-AD34-0E926837477D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8027BF51-8F0A-4036-AD34-0E926837477D}.Debug|x64.ActiveCfg = Debug|x64
+		{8027BF51-8F0A-4036-AD34-0E926837477D}.Debug|x64.Build.0 = Debug|x64
+		{8027BF51-8F0A-4036-AD34-0E926837477D}.Debug|x86.ActiveCfg = Debug|Win32
+		{8027BF51-8F0A-4036-AD34-0E926837477D}.Debug|x86.Build.0 = Debug|Win32
+		{8027BF51-8F0A-4036-AD34-0E926837477D}.Release|x64.ActiveCfg = Release|x64
+		{8027BF51-8F0A-4036-AD34-0E926837477D}.Release|x64.Build.0 = Release|x64
+		{8027BF51-8F0A-4036-AD34-0E926837477D}.Release|x86.ActiveCfg = Release|Win32
+		{8027BF51-8F0A-4036-AD34-0E926837477D}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {64DCA3EA-C59B-4647-86CE-8ECE36B493EC}
+	EndGlobalSection
+EndGlobal
