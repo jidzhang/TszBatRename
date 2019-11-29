@@ -9,15 +9,15 @@
 class CTszRenameApp : public CWinApp
 {
 public:
-    CTszRenameApp();
+	CTszRenameApp();
 
-    // 重写
+	// 重写
 public:
-    virtual BOOL InitInstance();
+	virtual BOOL InitInstance();
 
-    // 实现
+	// 实现
 
-    DECLARE_MESSAGE_MAP()
+	DECLARE_MESSAGE_MAP()
 };
 
 extern CTszRenameApp theApp;
