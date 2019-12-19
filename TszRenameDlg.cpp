@@ -5,6 +5,7 @@
 #include "FileMetaData.h"
 #include "resource.h"
 #include "SelectTextRangeDlg.h"
+#include "Settings.h"
 
 using namespace std;
 using namespace String;
@@ -165,6 +166,7 @@ BEGIN_MESSAGE_MAP(CTszRenameDlg, CDialogEx)
 	ON_WM_DROPFILES()
 	ON_WM_GETMINMAXINFO()
 	ON_WM_PAINT()
+	ON_WM_DESTROY()
 	ON_WM_QUERYDRAGICON()
 END_MESSAGE_MAP()
 
@@ -189,6 +191,22 @@ BOOL CTszRenameDlg::OnInitDialog()
 		AppendToFileList(m_input_file_list[i]);
 	}
 	rename_file_list();
+	//restore window position
+	int left = 0, bottom = 0, right = 0, top = 0;
+	BOOL isZoomed = FALSE, isIconic = FALSE;
+	LoadSetting(_T("CTszRenameDlg/wndLeft"), left);
+	LoadSetting(_T("CTszRenameDlg/wndBottom"), bottom);
+	LoadSetting(_T("CTszRenameDlg/wndRight"), right);
+	LoadSetting(_T("CTszRenameDlg/wndTop"), top);
+	LoadSetting(_T("CTszRenameDlg/IsZoomed"), isZoomed);
+	LoadSetting(_T("CTszRenameDlg/IsIconic"), isIconic);
+	if (!isIconic && !isZoomed) {
+		if (abs(right - left) > 0 && abs(top - bottom) > 0) {
+			SetWindowPos(NULL, left, top, abs(right - left), abs(bottom - top), 0);
+		}
+	} else if (isZoomed) {
+		ShowWindow(SW_SHOWMAXIMIZED);
+	}
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -216,6 +234,19 @@ void CTszRenameDlg::OnPaint()
 	} else {
 		CDialogEx::OnPaint();
 	}
+}
+
+void CTszRenameDlg::OnDestroy()
+{
+	CRect rect;
+	GetWindowRect(&rect);
+	SaveSetting(_T("CTszRenameDlg/wndLeft"), rect.left);
+	SaveSetting(_T("CTszRenameDlg/wndBottom"), rect.bottom);
+	SaveSetting(_T("CTszRenameDlg/wndRight"), rect.right);
+	SaveSetting(_T("CTszRenameDlg/wndTop"), rect.top);
+	SaveSetting(_T("CTszRenameDlg/IsZoomed"), IsZoomed());
+	SaveSetting(_T("CTszRenameDlg/IsIconic"), IsIconic());
+	CDialogEx::OnDestroy();
 }
 
 //当用户拖动最小化窗口时系统调用此函数取得光标

@@ -1,13 +1,14 @@
 #include "stdafx.h"
 #include "TszRename.h"
 #include "TszRenameDlg.h"
+#include "Settings.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
 BEGIN_MESSAGE_MAP(CTszRenameApp, CWinApp)
-	ON_COMMAND(ID_HELP, &CWinApp::OnHelp)
+	//ON_COMMAND(ID_HELP, &CWinApp::OnHelp)
 END_MESSAGE_MAP()
 
 CTszRenameApp::CTszRenameApp()
@@ -121,4 +122,10 @@ BOOL CTszRenameApp::InitInstance()
 	// 由于对话框已关闭，所以将返回 FALSE 以便退出应用程序，
 	//  而不是启动应用程序的消息泵。
 	return FALSE;
+}
+
+int CTszRenameApp::ExitInstance()
+{
+	DestorySetting();
+	return CWinApp::ExitInstance();
 }
