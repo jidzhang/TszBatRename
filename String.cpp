@@ -3,11 +3,11 @@
 
 namespace String
 {
-	BOOL WCharToMByte(const wchar_t* lpcwszStr, char** lpszStr)
+	BOOL WCharToMByte(const wchar_t * lpcwszStr, char ** lpszStr)
 	{
 		DWORD dwMinSize = WideCharToMultiByte(CP_OEMCP, NULL, lpcwszStr, -1, NULL, 0, NULL, FALSE);
 		if (dwMinSize > 0) {
-			char* sText = new char[dwMinSize];
+			char *sText = new char[dwMinSize];
 			if (!sText) {
 				delete[]sText; sText = NULL;
 				dwMinSize = 0;
@@ -21,11 +21,11 @@ namespace String
 		return dwMinSize;
 	}
 
-	DWORD MByteToWChar(const char* lpcszStr, wchar_t** lpwszStr)
+	DWORD MByteToWChar(const char * lpcszStr, wchar_t ** lpwszStr)
 	{
 		DWORD dwMinSize = MultiByteToWideChar(CP_ACP, 0, lpcszStr, -1, NULL, 0);
 		if (dwMinSize > 0) {
-			wchar_t* pwText = new wchar_t[dwMinSize];
+			wchar_t *pwText = new wchar_t[dwMinSize];
 			if (!pwText) {
 				delete[]pwText; pwText = NULL;
 				dwMinSize = 0;
@@ -39,7 +39,7 @@ namespace String
 		return dwMinSize;
 	}
 
-	CString ToCString(const std::string& str)
+	CString ToCString(const std::string & str)
 	{
 		CString strRe;
 #ifdef _UNICODE
@@ -95,31 +95,31 @@ namespace String
 		return ss.str();
 	}
 
-	std::string ToUpper(const std::string& v)
+	std::string ToUpper(const std::string & v)
 	{
 		std::string result = "";
 		std::transform(v.begin(), v.end(), back_inserter(result), ::toupper);
 		return result;
 	}
 
-	std::string ToLower(const std::string& v)
+	std::string ToLower(const std::string & v)
 	{
 		std::string result = "";
 		std::transform(v.begin(), v.end(), back_inserter(result), ::tolower);
 		return result;
 	}
 
-	int ToInt(const std::string& str)
+	int ToInt(const std::string & str)
 	{
 		return atoi(str.c_str());
 	}
 
-	double ToDouble(const std::string& str)
+	double ToDouble(const std::string & str)
 	{
 		return atof(str.c_str());
 	}
 
-	std::vector<std::string> Split(const std::string& data, const std::string& delimiters/*=" \t\r\n"*/)
+	std::vector<std::string> Split(const std::string & data, const std::string & delimiters/*=" \t\r\n"*/)
 	{
 		std::vector<std::string> items;
 		std::string::size_type start = 0;
@@ -142,4 +142,22 @@ namespace String
 		str.LoadString(nID);
 		return str;
 	}
+}
+
+CString JoinPath(LPCTSTR str1, LPCTSTR str2)
+{
+	CString result = str1;
+	result = result + _T("\\") + str2;
+	//左侧不可能有空格，右侧可能有空格
+	result.TrimLeft();
+	while (result.Replace(_T("\\\\"), _T("\\")) > 0) {
+	}
+	//路径名不包含最后的\,除非是C:\这种格式
+	if (!result.IsEmpty()) {
+		int len = result.GetLength();
+		if (len > 2 && result[len - 1] == '\\' && result[len - 2] != ':') {
+			result = result.Left(len - 1);
+		}
+	}
+	return result;
 }

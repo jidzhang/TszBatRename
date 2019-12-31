@@ -1,9 +1,8 @@
 #include "stdafx.h"
-#include "TszRename.h"
-#include "TszRenameDlg.h"
 #include "afxdialogex.h"
+#include "TszRename.h"
 #include "FileMetaData.h"
-#include "resource.h"
+#include "TszRenameDlg.h"
 #include "SelectTextRangeDlg.h"
 #include "Settings.h"
 
@@ -13,6 +12,19 @@ using namespace String;
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+
+typedef struct
+{
+	LVITEM* plvi;
+	BOOL bCheck;
+	CString sCol1;
+	CString sCol2;
+	CString sCol3;
+	CString sCol4;
+	CString sCol5;
+} lvItem, *plvItem;
+
+// CTszRenameDlg 对话框
 
 IMPLEMENT_DYNAMIC(CTszRenameDlg, CDialogEx)
 
@@ -28,6 +40,13 @@ CTszRenameDlg::CTszRenameDlg(CWnd* pParent /*=NULL*/)
 	, m_sort_inc(true)
 	, m_renaming(false)
 	, m_n_file_name_pos(0)
+	, m_pDragList(0)
+	, m_pDropList(0)
+	, m_pDragImage(0)
+	, m_bDragging(0)
+	, m_nDragIndex(0)
+	, m_nDropIndex(0)
+	, m_pDropWnd(0)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -57,12 +76,12 @@ void CTszRenameDlg::InitFileListCtrl()
 	CRect rect;
 	m_file_list_ctrl.GetWindowRect(&rect);
 	int w = rect.right - rect.left;
-	m_file_list_ctrl.InsertColumn(0, _T("↑旧文件名"), LVCFMT_LEFT, int(0.25 * w));
-	m_file_list_ctrl.InsertColumn(1, _T("扩展名"), LVCFMT_LEFT, int(0.10 * w));
-	m_file_list_ctrl.InsertColumn(2, _T("新文件名"), LVCFMT_LEFT, int(0.25 * w));
-	m_file_list_ctrl.InsertColumn(3, _T("大小"), LVCFMT_LEFT, int(0.10 * w));
-	m_file_list_ctrl.InsertColumn(4, _T("日期"), LVCFMT_LEFT, int(0.20 * w));
-	m_file_list_ctrl.InsertColumn(5, _T("位置"), LVCFMT_LEFT, int(0.30 * w));
+	m_file_list_ctrl.InsertColumn(0, _T("↑旧文件名"), LVCFMT_LEFT, int(0.25*w));
+	m_file_list_ctrl.InsertColumn(1, _T("扩展名"), LVCFMT_LEFT, int(0.10*w));
+	m_file_list_ctrl.InsertColumn(2, _T("新文件名"), LVCFMT_LEFT, int(0.25*w));
+	m_file_list_ctrl.InsertColumn(3, _T("大小"), LVCFMT_LEFT, int(0.10*w));
+	m_file_list_ctrl.InsertColumn(4, _T("日期"), LVCFMT_LEFT, int(0.20*w));
+	m_file_list_ctrl.InsertColumn(5, _T("位置"), LVCFMT_LEFT, int(0.30*w));
 }
 
 void CTszRenameDlg::AddToolTips()
@@ -159,14 +178,17 @@ BEGIN_MESSAGE_MAP(CTszRenameDlg, CDialogEx)
 	ON_EN_CHANGE(IDC_EDIT_COUNTER_START, &CTszRenameDlg::OnEnChangeEditCounterStart)
 	ON_EN_CHANGE(IDC_EDIT_COUNTER_STEP, &CTszRenameDlg::OnEnChangeEditCounterStep)
 	ON_EN_CHANGE(IDC_EDIT_EXT_NAME_PAT, &CTszRenameDlg::OnEnChangeEditExtNamePat)
+	ON_NOTIFY(LVN_BEGINDRAG, IDC_LIST_FILE, &CTszRenameDlg::OnBeginDrag)
 	ON_NOTIFY(LVN_COLUMNCLICK, IDC_LIST_FILE, &CTszRenameDlg::OnLvnColumnclickListFile)
 	ON_NOTIFY(LVN_ITEMCHANGED, IDC_LIST_FILE, &CTszRenameDlg::OnLvnItemchangedListFile)
 	ON_NOTIFY(UDN_DELTAPOS, IDC_SPIN1, &CTszRenameDlg::OnDeltaposSpin1)
 	ON_NOTIFY(UDN_DELTAPOS, IDC_SPIN2, &CTszRenameDlg::OnDeltaposSpin2)
+	ON_WM_DESTROY()
 	ON_WM_DROPFILES()
 	ON_WM_GETMINMAXINFO()
+	ON_WM_LBUTTONUP()
+	ON_WM_MOUSEMOVE()
 	ON_WM_PAINT()
-	ON_WM_DESTROY()
 	ON_WM_QUERYDRAGICON()
 END_MESSAGE_MAP()
 
@@ -185,6 +207,13 @@ BOOL CTszRenameDlg::OnInitDialog()
 	((CButton*)GetDlgItem(IDC_CHECK3))->SetCheck(TRUE);
 	InitFileListCtrl();
 	AddToolTips();
+
+	/////////////////////////////////////////////
+//// Set up initial variables
+	m_bDragging = false;
+	m_nDragIndex = -1;
+	m_nDropIndex = -1;
+	m_pDragImage = NULL;
 
 	//
 	for (size_t i = 0; i < m_input_file_list.size(); ++i) {
@@ -265,7 +294,7 @@ bool PathLess(CString p1, CString p2)
 	return StrCmpLogicalW(p1, p2) < 0;
 }
 
-bool FileMetaLessFunc(const CFileMetaData& meta1, const CFileMetaData& meta2)
+bool FileMetaLessFunc(const CFileMetaData & meta1, const CFileMetaData & meta2)
 {
 	if (meta1.m_checked && !meta2.m_checked)
 		return true;
@@ -320,7 +349,7 @@ bool FileMetaLessFunc(const CFileMetaData& meta1, const CFileMetaData& meta2)
 	return compare_reverse ? !b : b;
 }
 
-bool FileMetaLessFunc2(const CFileMetaData& meta1, const CFileMetaData& meta2)
+bool FileMetaLessFunc2(const CFileMetaData & meta1, const CFileMetaData & meta2)
 {
 	return meta1.m_sort_idx < meta2.m_sort_idx;
 }
@@ -346,7 +375,7 @@ void CTszRenameDlg::set_file_list(vector<CString> input_file_list)
 	}
 }
 
-void CTszRenameDlg::sort_file_list()
+void CTszRenameDlg::sort_file_list(bool reSort)
 {
 	int n = m_file_list_ctrl.GetItemCount();
 	if (n == 0)
@@ -355,38 +384,40 @@ void CTszRenameDlg::sort_file_list()
 		CString name = m_file_list_ctrl.GetItemText(i, 0);
 		CString ext = m_file_list_ctrl.GetItemText(i, 1);
 		CString path = m_file_list_ctrl.GetItemText(i, 5);
-		CString fullPath = path + name + _T(".") + ext;
-		BOOL b = m_file_list_ctrl.GetCheck(i);
+		CString fullPath = JoinPath(path, name + _T(".") + ext);
+		bool b = m_file_list_ctrl.GetCheck(i);
 		auto itr = m_file_meta_data_map.find(fullPath);
 		if (itr != m_file_meta_data_map.end()) {
-			itr->second.m_checked = b == TRUE;
+			itr->second.m_checked = b;
 		}
 	}
-	vector<CFileMetaData> file_list;
-	auto itr = m_file_meta_data_map.begin();
-	for (; itr != m_file_meta_data_map.end(); ++itr) {
-		file_list.push_back(itr->second);
-	}
-	std::sort(file_list.begin(), file_list.end(), FileMetaLessFunc);
-	for (size_t i = 0; i < file_list.size(); ++i) {
-		file_list[i].m_sort_idx = i + 1;
-		m_file_meta_data_map[file_list[i].m_file_path].m_sort_idx = i + 1;
+	if (reSort) {
+		vector<CFileMetaData> file_list;
+		auto itr = m_file_meta_data_map.begin();
+		for (; itr != m_file_meta_data_map.end(); ++itr) {
+			file_list.push_back(itr->second);
+		}
+		std::sort(file_list.begin(), file_list.end(), FileMetaLessFunc);
+		for (size_t i = 0; i < file_list.size(); ++i) {
+			m_file_meta_data_map[file_list[i].m_file_path].m_sort_idx = i + 1;
+		}
 	}
 }
 
-void CTszRenameDlg::rename_file_list()
+void CTszRenameDlg::auto_rename(bool reSort)
 {
-	if (!m_renaming) {
-		m_file_idx_to_name_map.clear();
-		m_renaming = true;
-		sort_file_list();
-		vector<CString> name_pats = split_name_pattern(m_file_name_pat);
-		vector<CString> ext_pats = split_name_pattern(m_ext_name_pat);
+	m_file_idx_to_name_map.clear();
+	vector<CString> name_pats = split_name_pattern(m_file_name_pat);
+	vector<CString> ext_pats = split_name_pattern(m_ext_name_pat);
+	if (reSort) {
 		auto itr = m_file_meta_data_map.begin();
+		int  count = 0;
 		for (; itr != m_file_meta_data_map.end(); ++itr) {
-			CFileMetaData& meta = itr->second;
-			CString name = replace_str_by_pat(meta, name_pats, false);
-			CString ext = replace_str_by_pat(meta, ext_pats, true);
+			if (itr->second.m_checked)
+				++count;
+			CFileMetaData & meta = itr->second;
+			CString name = replace_str_by_pat(meta, name_pats, false, count);
+			CString ext = replace_str_by_pat(meta, ext_pats, true, count);
 			meta.m_file_new = name + _T(".") + ext;
 			int idx = meta.m_sort_idx - 1;
 			m_file_list_ctrl.SetItemText(idx, 0, meta.m_file_name);
@@ -398,7 +429,45 @@ void CTszRenameDlg::rename_file_list()
 			m_file_list_ctrl.SetCheck(idx, meta.m_checked);
 			m_file_idx_to_name_map[idx] = itr->first;
 		}
-		replace_str_by_pat();
+	} else {
+		int n = m_file_list_ctrl.GetItemCount();
+		if (n == 0)
+			return;
+		int  count = 0;
+		for (int idx = 0; idx < n; ++idx) {
+			CString name = m_file_list_ctrl.GetItemText(idx, 0);
+			CString ext = m_file_list_ctrl.GetItemText(idx, 1);
+			CString path = m_file_list_ctrl.GetItemText(idx, 5);
+			CString fullPath = JoinPath(path, name + _T(".") + ext);
+			bool b = m_file_list_ctrl.GetCheck(idx);
+			auto itr = m_file_meta_data_map.find(fullPath);
+			if (itr != m_file_meta_data_map.end()) {
+				if (itr->second.m_checked)
+					++count;
+				CFileMetaData & meta = itr->second;
+				CString name = replace_str_by_pat(meta, name_pats, false, count);
+				CString ext = replace_str_by_pat(meta, ext_pats, true, count);
+				meta.m_file_new = name + _T(".") + ext;
+				m_file_list_ctrl.SetItemText(idx, 0, meta.m_file_name);
+				m_file_list_ctrl.SetItemText(idx, 1, meta.m_file_ext);
+				m_file_list_ctrl.SetItemText(idx, 2, meta.m_file_new);
+				m_file_list_ctrl.SetItemText(idx, 3, meta.m_file_size);
+				m_file_list_ctrl.SetItemText(idx, 4, meta.m_file_time);
+				m_file_list_ctrl.SetItemText(idx, 5, meta.m_file_dir);
+				m_file_list_ctrl.SetCheck(idx, meta.m_checked);
+				m_file_idx_to_name_map[idx] = itr->first;
+			}
+		}
+	}
+	replace_str_by_pat();
+}
+
+void CTszRenameDlg::rename_file_list(bool reSort)
+{
+	if (!m_renaming) {
+		m_renaming = true;
+		sort_file_list(reSort);
+		auto_rename(reSort);
 		m_renaming = false;
 	}
 }
@@ -414,7 +483,7 @@ CString formatNumber(int no, int length)
 	return ans;
 }
 
-CString CTszRenameDlg::replace_str_by_pat(const CFileMetaData& meta, vector<CString> pats, bool ext /*= false*/)
+CString CTszRenameDlg::replace_str_by_pat(const CFileMetaData & meta, vector<CString> pats, bool ext, int idx)
 {
 	CTime now = CTime::GetCurrentTime();
 	CString ymd = YYMMDD(now);
@@ -429,7 +498,7 @@ CString CTszRenameDlg::replace_str_by_pat(const CFileMetaData& meta, vector<CStr
 		if (pat == _T("<N>") || pat == _T("<E>")) {
 			ans += tmp_str;
 		} else if (pat == _T("<C>")) {
-			int idx = meta.m_sort_idx;
+			//int idx = meta.m_sort_idx;
 			idx = m_counter_start + (idx - 1) * m_counter_step;
 			//ans.Format(_T("%s%d"), ans, idx);
 			ans += formatNumber(idx, m_counter_max_len + 1);
@@ -526,13 +595,167 @@ std::vector<CString> CTszRenameDlg::split_name_pattern(CString name_pat)
 	return ans;
 }
 
+void CTszRenameDlg::DropItemOnList(CListCtrl* pDragList, CListCtrl* pDropList)
+{
+	//This routine performs the actual drop of the item dragged.
+	//It simply grabs the info from the Drag list (pDragList)
+	// and puts that info into the list dropped on (pDropList).
+	//Send:	pDragList = pointer to CListCtrl we dragged from,
+	//		pDropList = pointer to CListCtrl we are dropping on.
+	//Return: nothing.
+
+	////Variables
+	ASSERT(m_nDragIndex != -1);
+
+	// Unhilight the drop target
+	pDropList->SetItemState(m_nDropIndex, 0, LVIS_DROPHILITED);
+
+	//Set up the LV_ITEM for retrieving item from pDragList and adding the new item to the pDropList
+	TCHAR szLabel[256];
+	LVITEM lviT;
+	LVITEM* plvitem;
+
+	ZeroMemory(&lviT, sizeof(LVITEM)); //allocate and clear memory space for LV_ITEM
+	lviT.iItem = m_nDragIndex;
+	lviT.mask = LVIF_TEXT;
+	lviT.pszText = szLabel;
+	lviT.cchTextMax = 255;
+
+	lvItem* pItem;
+	lvItem lvi;
+	lvi.plvi = &lviT;
+	lvi.plvi->iItem = m_nDragIndex;
+	lvi.plvi->mask = LVIF_TEXT;
+	lvi.plvi->pszText = szLabel;
+	lvi.plvi->cchTextMax = 255;
+
+	if (pDragList->GetSelectedCount() == 1) {
+		// Get item that was dragged
+		pDragList->GetItem(lvi.plvi);
+		lvi.bCheck = pDragList->GetCheck(lvi.plvi->iItem);
+		lvi.sCol1 = pDragList->GetItemText(lvi.plvi->iItem, 1);
+		lvi.sCol2 = pDragList->GetItemText(lvi.plvi->iItem, 2);
+		lvi.sCol3 = pDragList->GetItemText(lvi.plvi->iItem, 3);
+		lvi.sCol4 = pDragList->GetItemText(lvi.plvi->iItem, 4);
+		lvi.sCol5 = pDragList->GetItemText(lvi.plvi->iItem, 5);
+
+		// Delete the original item (for Move operation)
+		// This is optional. If you want to implement a Copy operation, don't delete.
+		// This works very well though for re-arranging items within a CListCtrl.
+		// It is written at present such that when dragging from one list to the other
+		//  the item is copied, but if dragging within one list, the item is moved.
+		if (pDragList == pDropList) {
+			pDragList->DeleteItem(m_nDragIndex);
+			if (m_nDragIndex < m_nDropIndex) m_nDropIndex--; //decrement drop index to account for item
+															 //being deleted above it
+		}
+
+		// Insert item into pDropList
+		// if m_nDropIndex == -1, iItem = GetItemCount() (inserts at end of list), else iItem = m_nDropIndex
+		lvi.plvi->iItem = (m_nDropIndex == -1) ? pDropList->GetItemCount() : m_nDropIndex;
+		pDropList->InsertItem(lvi.plvi);
+		pDropList->SetCheck(lvi.plvi->iItem, lvi.bCheck);
+		pDropList->SetItemText(lvi.plvi->iItem, 1, (LPCTSTR)lvi.sCol1);
+		pDropList->SetItemText(lvi.plvi->iItem, 2, (LPCTSTR)lvi.sCol2);
+		pDropList->SetItemText(lvi.plvi->iItem, 3, (LPCTSTR)lvi.sCol3);
+		pDropList->SetItemText(lvi.plvi->iItem, 4, (LPCTSTR)lvi.sCol4);
+		pDropList->SetItemText(lvi.plvi->iItem, 5, (LPCTSTR)lvi.sCol5);
+
+		// Select the new item we just inserted
+		pDropList->SetItemState(lvi.plvi->iItem, LVIS_SELECTED, LVIS_SELECTED);
+	} else //more than 1 item is being dropped
+	{
+		//We have to parse through all of the selected items from the DragList
+		//1) Retrieve the info for the items and store them in memory
+		//2) If we are reordering, delete the items from the list
+		//3) Insert the items into the list (either same list or different list)
+
+		CList<lvItem*, lvItem*> listItems;
+		POSITION listPos;
+
+		//Retrieve the selected items
+		POSITION pos = pDragList->GetFirstSelectedItemPosition(); //iterator for the CListCtrl
+		while (pos) //so long as we have a valid POSITION, we keep iterating
+		{
+			plvitem = new LVITEM;
+			ZeroMemory(plvitem, sizeof(LVITEM));
+			pItem = new lvItem;
+			//ZeroMemory(pItem, sizeof(lvItem)); //If you use ZeroMemory on the lvItem struct, it creates an error when you try to set sCol2
+			pItem->plvi = plvitem;
+			pItem->plvi->iItem = m_nDragIndex;
+			pItem->plvi->mask = LVIF_TEXT;
+			pItem->plvi->pszText = new TCHAR[MAX_PATH]; //since this is a pointer to the string, we need a new pointer to a new string on the heap
+			pItem->plvi->cchTextMax = 255;
+
+			m_nDragIndex = pDragList->GetNextSelectedItem(pos);
+
+			//Get the item
+			pItem->plvi->iItem = m_nDragIndex; //set the index in the drag list to the selected item
+			pDragList->GetItem(pItem->plvi); //retrieve the information
+			pItem->bCheck = pDragList->GetCheck(pItem->plvi->iItem);
+			pItem->sCol1 = pDragList->GetItemText(pItem->plvi->iItem, 1);
+			pItem->sCol2 = pDragList->GetItemText(pItem->plvi->iItem, 2);
+			pItem->sCol3 = pDragList->GetItemText(pItem->plvi->iItem, 3);
+			pItem->sCol4 = pDragList->GetItemText(pItem->plvi->iItem, 4);
+			pItem->sCol5 = pDragList->GetItemText(pItem->plvi->iItem, 5);
+
+			//Save the pointer to the new item in our CList
+			listItems.AddTail(pItem);
+		} //EO while(pos) -- at this point we have deleted the moving items and stored them in memory
+
+		if (pDragList == pDropList) //we are reordering the list (moving)
+		{
+			//Delete the selected items
+			pos = pDragList->GetFirstSelectedItemPosition();
+			while (pos) {
+				pos = pDragList->GetFirstSelectedItemPosition();
+				m_nDragIndex = pDragList->GetNextSelectedItem(pos);
+
+				pDragList->DeleteItem(m_nDragIndex); //since we are MOVING, delete the item
+				if (m_nDragIndex < m_nDropIndex) m_nDropIndex--; //must decrement the drop index to account
+																 //for the deleted items
+			} //EO while(pos)
+		} //EO if(pDragList...
+
+		  //Iterate through the items stored in memory and add them back into the CListCtrl at the drop index
+		listPos = listItems.GetHeadPosition();
+		while (listPos) {
+			pItem = listItems.GetNext(listPos);
+
+			m_nDropIndex = (m_nDropIndex == -1) ? pDropList->GetItemCount() : m_nDropIndex;
+			pItem->plvi->iItem = m_nDropIndex;
+			pDropList->InsertItem(pItem->plvi); //add the item
+			pDropList->SetCheck(pItem->plvi->iItem);
+			pDropList->SetItemText(pItem->plvi->iItem, 1, pItem->sCol1);
+			pDropList->SetItemText(pItem->plvi->iItem, 2, pItem->sCol2);
+			pDropList->SetItemText(pItem->plvi->iItem, 3, pItem->sCol3);
+			pDropList->SetItemText(pItem->plvi->iItem, 4, pItem->sCol4);
+			pDropList->SetItemText(pItem->plvi->iItem, 5, pItem->sCol5);
+
+			pDropList->SetItemState(pItem->plvi->iItem, LVIS_SELECTED, LVIS_SELECTED); //highlight/select the item we just added
+
+			m_nDropIndex++; //increment the index we are dropping at to keep the dropped items in the same order they were in in the Drag List
+							//If we dont' increment this, the items are added in reverse order
+		} //EO while(listPos)
+		//free
+		listPos = listItems.GetHeadPosition();
+		while (listPos) {
+			pItem = listItems.GetNext(listPos);
+
+			delete[] pItem->plvi->pszText;
+			delete pItem->plvi;
+			delete pItem;
+		} //EO while(listPos)
+	}
+}
+
 void CTszRenameDlg::set_word_case()
 {
 	if (m_replace_word_case == 0)
 		return;
 }
 
-bool StringSearch(CString src, CString pat, int& begin, int& end)
+bool StringSearch(CString src, CString pat, int & begin, int & end)
 {
 	int p = pat.Find(_T("**"));
 	while (p >= 0) {
@@ -561,7 +784,7 @@ bool StringSearch(CString src, CString pat, int& begin, int& end)
 
 static bool g_cmp_ignore_case = true;
 
-bool StringMatch(CString src, CString pat, int begin, int& end)
+bool StringMatch(CString src, CString pat, int begin, int & end)
 {
 	int p = pat.Find(_T("**"));
 	while (p >= 0) {
@@ -579,7 +802,7 @@ bool StringMatch(CString src, CString pat, int begin, int& end)
 			bool b = StringSearch(src, patNext, sidx, end);
 			return b;
 		}
-		bool b = g_cmp_ignore_case ? (_totlower(src[sidx]) == _totlower(pat[pidx])) : (src[sidx] == pat[pidx]);
+		bool b = g_cmp_ignore_case ? (_tolower(src[sidx]) == _tolower(pat[pidx])) : (src[sidx] == pat[pidx]);
 		if (_T('?') == pat[pidx] || b) {
 			++sidx;
 			++pidx;
@@ -729,7 +952,7 @@ void CTszRenameDlg::OnBnClickedButton_SelectFiles()
 	const DWORD numberOfFileNames = 100;
 	const DWORD fileNameMaxLength = MAX_PATH + 1;
 	const DWORD bufferSize = numberOfFileNames * fileNameMaxLength + 1;
-	TCHAR* buffer = new TCHAR[bufferSize];
+	TCHAR * buffer = new TCHAR[bufferSize];
 	buffer[0] = NULL;
 	buffer[bufferSize - 1] = NULL;
 	fdlg.m_ofn.lpstrFile = buffer;
@@ -785,17 +1008,28 @@ void CTszRenameDlg::OnBnClickedButton_RemoveFiles()
 			selected_items.insert(n);
 		}
 	}
+	if (selected_items.empty())
+		return;
 	auto itr = selected_items.rbegin();
 	for (; itr != selected_items.rend(); ++itr) {
 		int idx = *itr;
 		CString name = m_file_list_ctrl.GetItemText(idx, 0);
 		CString ext = m_file_list_ctrl.GetItemText(idx, 1);
 		CString dir = m_file_list_ctrl.GetItemText(idx, 5);
-		CString path = dir + _T("\\") + name + _T(".") + ext;
+		CString path = JoinPath(dir, name + _T(".") + ext);
 		m_file_meta_data_map.erase(path);
+		m_file_idx_to_name_map.erase(idx);
 		m_file_list_ctrl.DeleteItem(idx);
 	}
 	rename_file_list();
+	int knt = m_file_list_ctrl.GetItemCount();
+	if (knt == 0)
+		return;
+	if (*selected_items.begin() < knt)
+		m_file_list_ctrl.SetItemState(*selected_items.begin(), LVNI_FOCUSED | LVIS_SELECTED, LVNI_FOCUSED | LVIS_SELECTED);
+	else
+		m_file_list_ctrl.SetItemState(knt - 1, LVNI_FOCUSED | LVIS_SELECTED, LVNI_FOCUSED | LVIS_SELECTED);
+	m_file_list_ctrl.SetFocus();
 }
 
 void CTszRenameDlg::OnBnClickedButton1()
@@ -840,7 +1074,7 @@ void CTszRenameDlg::OnBnClickedButton10()
 	rename_file_list();
 }
 
-void CTszRenameDlg::OnDeltaposSpin1(NMHDR* pNMHDR, LRESULT* pResult)
+void CTszRenameDlg::OnDeltaposSpin1(NMHDR *pNMHDR, LRESULT *pResult)
 {
 	UpdateDataWnd upd(this);
 	LPNMUPDOWN pNMUpDown = reinterpret_cast<LPNMUPDOWN>(pNMHDR);
@@ -853,7 +1087,7 @@ void CTszRenameDlg::OnDeltaposSpin1(NMHDR* pNMHDR, LRESULT* pResult)
 	rename_file_list();
 }
 
-void CTszRenameDlg::OnDeltaposSpin2(NMHDR* pNMHDR, LRESULT* pResult)
+void CTszRenameDlg::OnDeltaposSpin2(NMHDR *pNMHDR, LRESULT *pResult)
 {
 	UpdateDataWnd upd(this);
 	LPNMUPDOWN pNMUpDown = reinterpret_cast<LPNMUPDOWN>(pNMHDR);
@@ -888,7 +1122,7 @@ void CTszRenameDlg::OnEnChangeEditExtNamePat()
 	rename_file_list();
 }
 
-void CTszRenameDlg::OnLvnColumnclickListFile(NMHDR* pNMHDR, LRESULT* pResult)
+void CTszRenameDlg::OnLvnColumnclickListFile(NMHDR *pNMHDR, LRESULT *pResult)
 {
 	LPNMLISTVIEW pNMLV = reinterpret_cast<LPNMLISTVIEW>(pNMHDR);
 	// TODO: 在此添加控件通知处理程序代码
@@ -940,13 +1174,13 @@ void CTszRenameDlg::OnLvnColumnclickListFile(NMHDR* pNMHDR, LRESULT* pResult)
 	rename_file_list();
 }
 
-void CTszRenameDlg::OnLvnItemchangedListFile(NMHDR* pNMHDR, LRESULT* pResult)
+void CTszRenameDlg::OnLvnItemchangedListFile(NMHDR *pNMHDR, LRESULT *pResult)
 {
 	LPNMLISTVIEW pNMLV = reinterpret_cast<LPNMLISTVIEW>(pNMHDR);
 	*pResult = 0;
 	if (pNMLV->uNewState == 0x1000 && pNMLV->uOldState == 0x2000 || pNMLV->uNewState == 0x2000 && pNMLV->uOldState == 0x1000) {
 		if (!m_renaming) {
-			rename_file_list();
+			rename_file_list(false);
 		}
 	}
 }
@@ -957,7 +1191,7 @@ void CTszRenameDlg::OnBnClickedButton_RenameNow()
 	set<CString> tmp_name_set;
 	auto itr = m_file_meta_data_map.begin();
 	for (; itr != m_file_meta_data_map.end(); ++itr) {
-		const CFileMetaData& meta = itr->second;
+		const CFileMetaData & meta = itr->second;
 		if (meta.m_checked) {
 			if (tmp_name_set.find(meta.m_file_new) != tmp_name_set.end()) {
 				break;
@@ -973,7 +1207,7 @@ void CTszRenameDlg::OnBnClickedButton_RenameNow()
 	itr = m_file_meta_data_map.begin();
 	vector<CFileMetaData> file_list;
 	for (; itr != m_file_meta_data_map.end(); ++itr) {
-		const CFileMetaData& meta = itr->second;
+		const CFileMetaData & meta = itr->second;
 		if (meta.m_checked) {
 			CString str = meta.m_file_dir + meta.m_file_new;
 			if (str != meta.m_file_path) {
@@ -984,13 +1218,13 @@ void CTszRenameDlg::OnBnClickedButton_RenameNow()
 	}
 	sort(file_list.begin(), file_list.end(), FileMetaLessFunc2);
 	for (size_t i = 0; i < file_list.size(); ++i) {
-		const CFileMetaData& meta = file_list[i];
+		const CFileMetaData & meta = file_list[i];
 		CString str = meta.m_file_dir + meta.m_file_new + _T(".tmp");
 		MoveFile(meta.m_file_path, str);
 	}
 	int count = 0;
 	for (size_t i = 0; i < file_list.size(); ++i) {
-		const CFileMetaData& meta = file_list[i];
+		const CFileMetaData & meta = file_list[i];
 		CString str1 = meta.m_file_dir + meta.m_file_new + _T(".tmp");
 		CString str2 = meta.m_file_dir + meta.m_file_new;
 		BOOL b = MoveFile(str1, str2);
@@ -1031,6 +1265,16 @@ BOOL CTszRenameDlg::PreTranslateMessage(MSG* pMsg)
 			m_n_file_name_pos = m_cmbFilename.GetEditSel();
 		}
 	}
+	if (pMsg->message == WM_KEYDOWN) {
+		if (GetFocus() == GetDlgItem(IDC_LIST_FILE)) {
+			switch (pMsg->wParam) {
+			case VK_DELETE:
+				OnBnClickedButton_RemoveFiles();
+				break;
+			}
+		}
+	}
+
 	return CDialogEx::PreTranslateMessage(pMsg);
 }
 
@@ -1069,7 +1313,7 @@ void CTszRenameDlg::OnBnClickedButton_Name_Range()
 		if (rt == IDOK) {
 			CString str = dlg.GetTextRange();
 			if (!str.IsEmpty()) {
-				InsertStringToNamePat(_T("<N") + str + _T(">"));
+				m_file_name_pat += _T("<N") + str + _T(">");
 				rename_file_list();
 				UpdateData(FALSE);
 			}
@@ -1207,5 +1451,183 @@ void CTszRenameDlg::OnDropFiles(HDROP hDropInfo)
 			AppendToFileList(buffer);
 		}
 	}
+	rename_file_list(true);
 	CDialogEx::OnDropFiles(hDropInfo);
+}
+
+void CTszRenameDlg::OnMouseMove(UINT nFlags, CPoint point)
+{
+	//While the mouse is moving, this routine is called.
+	//This routine will redraw the drag image at the present
+	// mouse location to display the dragging.
+	//Also, while over a CListCtrl, this routine will highlight
+	// the item we are hovering over.
+
+	//// If we are in a drag/drop procedure (m_bDragging is true)
+	if (m_bDragging) {
+		//// Move the drag image
+		CPoint pt(point);	//get our current mouse coordinates
+		ClientToScreen(&pt); //convert to screen coordinates
+		BOOL b = m_pDragImage->DragMove(pt); //move the drag image to those coordinates
+									// Unlock window updates (this allows the dragging image to be shown smoothly)
+		ASSERT(b);
+		b = m_pDragImage->DragShowNolock(false);
+		ASSERT(b);
+
+		//// Get the CWnd pointer of the window that is under the mouse cursor
+		CWnd* pDropWnd = WindowFromPoint(pt);
+		ASSERT(pDropWnd); //make sure we have a window
+
+						  //// If we drag outside current window we need to adjust the highlights displayed
+		if (pDropWnd != m_pDropWnd) {
+			if (m_nDropIndex != -1) //If we drag over the CListCtrl header, turn off the hover highlight
+			{
+				TRACE("m_nDropIndex is not -1\n");
+				CListCtrl* pList = (CListCtrl*)m_pDropWnd;
+				VERIFY(pList->SetItemState(m_nDropIndex, 0, LVIS_DROPHILITED));
+				// redraw item
+				VERIFY(pList->RedrawItems(m_nDropIndex, m_nDropIndex));
+				pList->UpdateWindow();
+				m_nDropIndex = -1;
+			} else //If we drag out of the CListCtrl altogether
+			{
+				TRACE("m_nDropIndex is -1\n");
+				CListCtrl* pList = (CListCtrl*)m_pDropWnd;
+				int i = 0;
+				int nCount = pList->GetItemCount();
+				for (i = 0; i < nCount; i++) {
+					pList->SetItemState(i, 0, LVIS_DROPHILITED);
+				}
+				pList->RedrawItems(0, nCount);
+				pList->UpdateWindow();
+			}
+		}
+
+		// Save current window pointer as the CListCtrl we are dropping onto
+		m_pDropWnd = pDropWnd;
+
+		// Convert from screen coordinates to drop target client coordinates
+		pDropWnd->ScreenToClient(&pt);
+
+		//If we are hovering over a CListCtrl we need to adjust the highlights
+		if (pDropWnd->IsKindOf(RUNTIME_CLASS(CListCtrl))) {
+			//Note that we can drop here
+			SetCursor(LoadCursor(NULL, IDC_HAND));
+			UINT uFlags;
+			CListCtrl* pList = (CListCtrl*)pDropWnd;
+
+			if (m_nDropIndex != -1) {
+				// Turn off hilight for previous drop target
+				pList->SetItemState(m_nDropIndex, 0, LVIS_DROPHILITED);
+				// Redraw previous item
+				pList->RedrawItems(m_nDropIndex, m_nDropIndex);
+			}
+
+			// Get the item that is below cursor
+			m_nDropIndex = ((CListCtrl*)pDropWnd)->HitTest(pt, &uFlags);
+			if (m_nDropIndex != -1) {
+				// Highlight it
+				pList->SetItemState(m_nDropIndex, LVIS_DROPHILITED, LVIS_DROPHILITED);
+				// Redraw item
+				pList->RedrawItems(m_nDropIndex, m_nDropIndex);
+			}
+			pList->UpdateWindow();
+		} else {
+			//If we are not hovering over a CListCtrl, change the cursor
+			// to note that we cannot drop here
+			SetCursor(LoadCursor(NULL, IDC_NO));
+		}
+		// Lock window updates
+		b = m_pDragImage->DragShowNolock(true);
+		ASSERT(b);
+	}
+
+	CDialogEx::OnMouseMove(nFlags, point);
+}
+
+void CTszRenameDlg::OnLButtonUp(UINT nFlags, CPoint point)
+{
+	//This routine is the end of the drag/drop operation.
+	//When the button is released, we are to drop the item.
+	//There are a few things we need to do to clean up and
+	// finalize the drop:
+	//	1) Release the mouse capture
+	//	2) Set m_bDragging to false to signify we are not dragging
+	//	3) Actually drop the item (we call a separate function to do that)
+
+	bool dragged = false;
+	//If we are in a drag and drop operation (otherwise we don't do anything)
+	if (m_bDragging) {
+		// Release mouse capture, so that other controls can get control/messages
+		ReleaseCapture();
+
+		// Note that we are NOT in a drag operation
+		m_bDragging = FALSE;
+
+		// End dragging image
+		BOOL b = m_pDragImage->DragLeave(GetDesktopWindow());
+		ASSERT(b);
+		m_pDragImage->EndDrag();
+		delete m_pDragImage; //must delete it because it was created at the beginning of the drag
+
+		CPoint pt(point); //Get current mouse coordinates
+		ClientToScreen(&pt); //Convert to screen coordinates
+							 // Get the CWnd pointer of the window that is under the mouse cursor
+		CWnd* pDropWnd = WindowFromPoint(pt);
+		ASSERT(pDropWnd); //make sure we have a window pointer
+						  // If window is CListCtrl, we perform the drop
+		if (pDropWnd && pDropWnd->IsKindOf(RUNTIME_CLASS(CListCtrl))) {
+			m_pDropList = (CListCtrl*)pDropWnd; //Set pointer to the list we are dropping on
+			DropItemOnList(m_pDragList, m_pDropList); //Call routine to perform the actual drop
+			dragged = true;
+		}
+	}
+
+	if (dragged)
+		rename_file_list(false);
+	CDialogEx::OnLButtonUp(nFlags, point);
+}
+
+void CTszRenameDlg::OnBeginDrag(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	//This routine sets the parameters for a Drag and Drop operation.
+	//It sets some variables to track the Drag/Drop as well
+	// as creating the drag image to be shown during the drag.
+
+	NM_LISTVIEW* pNMListView = (NM_LISTVIEW*)pNMHDR;
+
+	// Save the index of the item being dragged in m_nDragIndex
+	//  This will be used later for retrieving the info dragged
+	m_nDragIndex = pNMListView->iItem;
+
+	// Create a drag image
+	POINT pt;
+	pt.x = 0;
+	pt.y = 0;
+	int nOffset = -2; //offset in pixels for drag image (positive is up and to the left; neg is down and to the right)
+	if (m_file_list_ctrl.GetSelectedCount() > 1) //more than one item is selected
+		pt.x = nOffset;
+	pt.y = nOffset;
+
+	m_pDragImage = m_file_list_ctrl.CreateDragImage(m_nDragIndex, &pt);
+	ASSERT(m_pDragImage); //make sure it was created
+						  //We will call delete later (in LButtonUp) to clean this up
+
+	// Change the cursor to the drag image
+	//	(still must perform DragMove() in OnMouseMove() to show it moving)
+	BOOL b = m_pDragImage->BeginDrag(0, CPoint(nOffset, nOffset - 4));
+	ASSERT(b);
+	b = m_pDragImage->DragEnter(GetDesktopWindow(), pNMListView->ptAction);
+	ASSERT(b);
+
+	// Set dragging flag and others
+	m_bDragging = TRUE;	//we are in a drag and drop operation
+	m_nDropIndex = -1;	//we don't have a drop index yet
+	m_pDragList = &m_file_list_ctrl; //make note of which list we are dragging from
+	m_pDropWnd = &m_file_list_ctrl;	//at present the drag list is the drop list
+
+	// Capture all mouse messages
+	SetCapture();
+
+	*pResult = 0;
 }
