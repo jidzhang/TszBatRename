@@ -54,18 +54,18 @@ CTszRenameDlg::CTszRenameDlg(CWnd* pParent /*=NULL*/)
 void CTszRenameDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
-	DDX_Text(pDX, IDC_EDIT_COUNTER_START, m_counter_start);
-	DDX_Text(pDX, IDC_EDIT_COUNTER_STEP, m_counter_step);
-	DDX_CBIndex(pDX, IDC_COMBO_COUNTER_LEN, m_counter_max_len);
 	DDV_MinMaxInt(pDX, m_counter_max_len, 0, 9);
+	DDX_CBIndex(pDX, IDC_COMBO_COUNTER_LEN, m_counter_max_len);
 	DDX_CBIndex(pDX, IDC_COMBO_WORD_CASE, m_replace_word_case);
 	DDX_CBString(pDX, IDC_COMBO_FILENAME_PAT, m_file_name_pat);
-	DDX_Control(pDX, IDC_COMBO_OLD_STRING, m_cmb_str_find);
-	DDX_Control(pDX, IDC_COMBO_NEW_STRING, m_cmb_str_replace);
-	DDX_Text(pDX, IDC_EDIT_EXT_NAME_PAT, m_ext_name_pat);
-	DDX_Control(pDX, IDC_LIST_FILE, m_file_list_ctrl);
 	DDX_Control(pDX, IDC_COMBO_FILENAME_PAT, m_cmbFilename);
+	DDX_Control(pDX, IDC_COMBO_NEW_STRING, m_cmb_str_replace);
+	DDX_Control(pDX, IDC_COMBO_OLD_STRING, m_cmb_str_find);
 	DDX_Control(pDX, IDC_EDIT_EXT_NAME_PAT, m_edEXT);
+	DDX_Control(pDX, IDC_LIST_FILE, m_file_list_ctrl);
+	DDX_Text(pDX, IDC_EDIT_COUNTER_START, m_counter_start);
+	DDX_Text(pDX, IDC_EDIT_COUNTER_STEP, m_counter_step);
+	DDX_Text(pDX, IDC_EDIT_EXT_NAME_PAT, m_ext_name_pat);
 }
 
 void CTszRenameDlg::InitFileListCtrl()
@@ -149,6 +149,73 @@ void CTszRenameDlg::InsertStringToEXTPat(CString mark)
 	}
 }
 
+static void Save(CComboBox & cmb, CString nameCMB)
+{
+	CString item;
+	cmb.GetWindowText(item);
+	int n = cmb.GetCurSel();
+	if (n > 0) {
+		cmb.DeleteString(n);
+		cmb.InsertString(0, item);
+	} else if (n < 0) {
+		cmb.InsertString(0, item);
+	}
+	CString items;
+	int count = min(10, cmb.GetCount());
+	for (int i = 0; i < count; ++i) {
+		CString item;
+		cmb.GetLBText(i, item);
+		if (i + 1 == count)
+			items += item;
+		else
+			items += item + _T(";");
+	}
+	SaveSetting(_T("CTszRenameDlg_All") + nameCMB, items);
+}
+
+static void Load(CComboBox & cmb, CString nameCMB)
+{
+	CString items;
+	LoadSetting(_T("CTszRenameDlg_All") + nameCMB, items);
+	int n = items.Find(';');
+	while (n > 0) {
+		CString item = items.Left(n);
+		items = items.Mid(n + 1);
+		n = items.Find(';');
+		cmb.AddString(item);
+	}
+	if (!items.IsEmpty())
+		cmb.AddString(items);
+	if (cmb.GetCount() > 0)
+		cmb.SetCurSel(0);
+}
+
+void CTszRenameDlg::SaveData()
+{
+	UpdateData(TRUE);
+	Save(m_cmbFilename, _T("NamePat"));
+	Save(m_cmb_str_find, _T("FindStr"));
+	Save(m_cmb_str_replace, _T("ReplaceStr"));
+	SaveSetting(_T("CTszRenameDlg_COUNTER_START"), m_counter_start);
+	SaveSetting(_T("CTszRenameDlg_COUNTER_STEP"), m_counter_step);
+	SaveSetting(_T("CTszRenameDlg_EXT_NAME_PAT"), m_ext_name_pat);
+	SaveSetting(_T("CTszRenameDlg_COMBO_COUNTER_LEN"), m_counter_max_len);
+	SaveSetting(_T("CTszRenameDlg_COMBO_WORD_CASE"), m_replace_word_case);
+}
+
+void CTszRenameDlg::LoadData()
+{
+	Load(m_cmbFilename, _T("NamePat"));
+	Load(m_cmb_str_find, _T("FindStr"));
+	Load(m_cmb_str_replace, _T("ReplaceStr"));
+	LoadSetting(_T("CTszRenameDlg_COUNTER_START"), m_counter_start);
+	LoadSetting(_T("CTszRenameDlg_COUNTER_STEP"), m_counter_step);
+	LoadSetting(_T("CTszRenameDlg_EXT_NAME_PAT"), m_ext_name_pat);
+	LoadSetting(_T("CTszRenameDlg_COMBO_COUNTER_LEN"), m_counter_max_len);
+	LoadSetting(_T("CTszRenameDlg_COMBO_WORD_CASE"), m_replace_word_case);
+	UpdateData(FALSE);
+}
+
 BEGIN_MESSAGE_MAP(CTszRenameDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON1, &CTszRenameDlg::OnBnClickedButton1)
 	ON_BN_CLICKED(IDC_BUTTON10, &CTszRenameDlg::OnBnClickedButton10)
@@ -219,7 +286,11 @@ BOOL CTszRenameDlg::OnInitDialog()
 	for (size_t i = 0; i < m_input_file_list.size(); ++i) {
 		AppendToFileList(m_input_file_list[i]);
 	}
+
+	LoadData();
+
 	rename_file_list();
+
 	//restore window position
 	int left = 0, bottom = 0, right = 0, top = 0;
 	BOOL isZoomed = FALSE, isIconic = FALSE;
@@ -1187,6 +1258,7 @@ void CTszRenameDlg::OnLvnItemchangedListFile(NMHDR *pNMHDR, LRESULT *pResult)
 
 void CTszRenameDlg::OnBnClickedButton_RenameNow()
 {
+	SaveData();
 	//先检测有没有重名的
 	set<CString> tmp_name_set;
 	auto itr = m_file_meta_data_map.begin();

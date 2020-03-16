@@ -29,6 +29,8 @@ private:
 	void AppendToFileList(CString filePath);
 	void InsertStringToNamePat(CString mark);
 	void InsertStringToEXTPat(CString mark);
+	void SaveData();
+	void LoadData();
 
 	// й╣ож
 protected:

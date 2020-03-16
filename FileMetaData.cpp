@@ -62,5 +62,5 @@ CFileMetaData::~CFileMetaData()
 
 bool CFileMetaData::Status()
 {
-	return m_status;
+	return m_status && !m_file_name.IsEmpty() && !m_file_time.IsEmpty();
 }
